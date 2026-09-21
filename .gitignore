@@ -1,0 +1,114 @@
+# ==========================================
+# Python
+# ==========================================
+
+# Byte-compiled / optimized files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+build/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+.pytest_cache/
+coverage.xml
+*.cover
+*.py,cover
+
+# Type checkers
+.mypy_cache/
+.pyre/
+.pytype/
+
+# Linting
+.ruff_cache/
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# Virtual environments
+.env
+.venv/
+venv/
+ENV/
+env/
+
+# Environment variables
+.env.*
+!.env.example
+
+# IDEs / Editors
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Local application data
+.local/
+.cache/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# ==========================================
+# Project-specific
+# ==========================================
+
+# Large data files
+*.parquet
+
+# Generated reports
+reports/
+output/
+input/
+exports/
+
+# Secrets
+*.pem
+*.key
+*.pfx
+secrets.json
+
+# Build artifacts
+bin/
+
+# Claude / AI generated scratch files (optional)
+.claude/
