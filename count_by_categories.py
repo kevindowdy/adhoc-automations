@@ -37,13 +37,21 @@ class InputFile(TypedDict):
 
 # Each entry becomes one sheet (named after ``sheetName``) in OUTPUT_FILE.
 # ``sheetName`` is ignored for CSV/TSV input, which has no sheets to select.
-INPUT_FILES: Final[list[InputFile]] = [
-    {"filePath": r"C:\Users\fbfepde\Downloads\input1.xlsx", "sheetName": "Sheet1"},
-    {"filePath": r"C:\Users\fbfepde\Downloads\input2.xlsx", "sheetName": "Sheet1"},
+INPUT_FILES = [
+    # {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "January"},
+    # {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "February"},
+    # {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "March"},
+    # {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "April"},
+    # {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "May"},
+    # {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "June"},
+    # {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "July"},
+    # {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "August"},
+    # {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "September"},
+    {"filePath": r"data\output\all_past_due_vulnerabilities.xlsx", "sheetName": "Today"},
 ]
 
 # Grouping columns, top-to-bottom nesting order, applied to every input.
-GROUP_COLUMNS: Final[list[str]] = ["MC2"]
+GROUP_COLUMNS: Final[list[str]] = ["saltminer.inventory_asset.attributes.appmap.application_owner_mc_2"]
 
 OUTPUT_FILE: Final[Path] = Path("data/output/category_counts.xlsx")
 
@@ -58,10 +66,10 @@ GRAND_TOTAL_LABEL: Final[str] = "Grand Total"
 
 SHEET_NAME_MAX_LENGTH: Final[int] = 31  # Excel sheet-name limit.
 
-CATEGORY_COLUMN: Final[str] = "MC2"
+CATEGORY_COLUMN: Final[str] = "Application Owner"
 LEVEL_COLUMN: Final[str] = "saltminer.inventory_asset.attributes.appmap.cio"
 COUNT_COLUMN: Final[str] = (
-    "saltminer.inventory_asset.attributes.appmap.application_owner_mc_2"
+    "Total Past Due"
 )
 
 APP_NAME = "count-by-categories"
