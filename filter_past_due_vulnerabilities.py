@@ -20,7 +20,7 @@ import pandas as pd
 # Column in the open-vulnerability export whose value is the number of days
 # a vulnerability is past its remediation due date. A value greater than
 # zero means the vulnerability is past due.
-DAYS_PAST_DUE_COLUMN: Final[str] = "Days Past Due"
+DAYS_PAST_DUE_COLUMN: Final[str] = "saltminer.attributes.DaysPastDue"
 
 # Column added to each filtered dataset to record which report it came from.
 MONTH_COLUMN: Final[str] = "Month"
@@ -38,10 +38,19 @@ class InputFile(TypedDict):
     month: str
 
 
+BASE_PATH = fr"C:\Users\fbfepde\Downloads"
+
 INPUT_FILES: Final[list[InputFile]] = [
-    {"filePath": "data/input/open_vulnerabilities_2026_07.xlsx", "month": "July"},
-    {"filePath": "data/input/open_vulnerabilities_2026_08.xlsx", "month": "August"},
-    {"filePath": "data/input/open_vulnerabilities_2026_09.xlsx", "month": "September"},
+    {"filePath": fr"{BASE_PATH}\FIG Open Vulnerabilities_20260102.xlsx", "month": "January"},
+    {"filePath": fr"{BASE_PATH}\FIG Open Vulnerabilities_20260202.xlsx", "month": "February"},
+    {"filePath": fr"{BASE_PATH}\FIG Open Vulnerabilities_20260302.xlsx", "month": "March"},
+    {"filePath": fr"{BASE_PATH}\FIG Open Vulnerabilities_20260401.xlsx", "month": "April"},
+    {"filePath": fr"{BASE_PATH}\FIG Open Vulnerabilities_20260504.xlsx", "month": "May"},
+    {"filePath": fr"{BASE_PATH}\FIG Open Vulnerabilities_20260601.xlsx", "month": "June"},
+    {"filePath": fr"{BASE_PATH}\FIG Open Vulnerabilities_20260701.xlsx", "month": "July"},
+    {"filePath": fr"{BASE_PATH}\FIG Open Vulnerabilities_20260803.xlsx", "month": "August"},
+    {"filePath": fr"{BASE_PATH}\FIG Open Vulnerabilities_20260901.xlsx", "month": "September"},
+    {"filePath": fr"{BASE_PATH}\FIG Open Vulnerabilities_20260922.xlsx", "month": "Today"},
 ]
 
 OUTPUT_FILE: Final[Path] = Path("data/output/past_due_vulnerabilities.xlsx")

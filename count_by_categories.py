@@ -39,9 +39,9 @@ INDENT_SPACES_PER_LEVEL: Final[int] = 2
 
 GRAND_TOTAL_LABEL: Final[str] = "Grand Total"
 
-CATEGORY_COLUMN: Final[str] = "Category"
-LEVEL_COLUMN: Final[str] = "Level"
-COUNT_COLUMN: Final[str] = "Count"
+CATEGORY_COLUMN: Final[str] = "MC2"
+LEVEL_COLUMN: Final[str] = "saltminer.inventory_asset.attributes.appmap.cio"
+COUNT_COLUMN: Final[str] = "saltminer.inventory_asset.attributes.appmap.application_owner_mc_2"
 
 APP_NAME = "count-by-categories"
 
