@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `calculate_on_time_remediation.py`: computes on-time vs. late
+  remediation stats for closed vulnerabilities. Each configured input file
+  (already closed-only) is processed independently: rows are filtered down
+  to `SEVERITY_LEVELS` (defaults to `["Critical", "High"]`), then split
+  into "late" (`DaysPastDue` > 0, matching the existing past-due
+  definition in `filter_past_due_vulnerabilities.py`) and "on time"
+  (everything else -- zero, negative, or missing/non-numeric `DaysPastDue`
+  values all count as on time, so the two counts always add up to the
+  total). A one-sentence summary per file is logged, e.g. "As of today,
+  for September: 42 Critical/High vulnerabilities have been remediated. 5
+  were remediated late and 37 were remediated on time. The on-time
+  remediation rate is 37/42 (88.1%)." Nothing is written to disk -- the
+  deliverable is the logged summary, not a report file.
+- `tests/unit/test_calculate_on_time_remediation.py` and
+  `tests/integration/test_calculate_on_time_remediation_logging.py`: unit
+  coverage for the severity filter, stats calculation, and summary
+  formatting, plus an end-to-end integration test that runs `main()`
+  against real CSV/Excel input files and asserts on the logged summaries.
+
 ### Fixed
 
 - `count_by_categories.py`: the internal nesting-level marker (previously
