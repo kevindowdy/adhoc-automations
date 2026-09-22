@@ -9,9 +9,19 @@ Each entry in ``INPUT_FILES`` names a source file and the sheet to read
 from it. Every entry is summarized independently using the same
 ``GROUP_COLUMNS`` and written to its own sheet in a single consolidated
 output workbook, mirroring the per-month sheet layout used by
-``filter_past_due_vulnerabilities.py``. No filtering, date parsing, or
-categorization logic lives here -- input files are expected to already
-contain only the rows that belong in the count.
+``filter_past_due_vulnerabilities.py``. No filtering or date-parsing logic
+lives here -- input files are expected to already contain only the rows
+that belong in the count.
+
+Each report row can optionally carry two independent breakdowns of its
+underlying rows, in addition to the raw ``COUNT_COLUMN`` total: one column
+per configured ``SEVERITY_LEVELS`` entry (how many rows have that value in
+``SEVERITY_COLUMN``), and one column per configured ``DAY_BUCKETS`` entry
+(how many rows fall in that day range, read from
+``DAYS_PAST_DUE_COLUMN``). Either breakdown is skipped entirely by setting
+its column constant to ``None``. The categorization logic for each lives
+in its own function (``categorize_severity`` / ``categorize_days_past_due``)
+so it can be tweaked independently of the report-building logic.
 """
 
 from __future__ import annotations
@@ -19,7 +29,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Final, TypedDict
+from typing import Any, Final, TypedDict
 
 import pandas as pd
 
@@ -35,6 +45,18 @@ class InputFile(TypedDict):
     sheetName: str
 
 
+class DayBucket(TypedDict):
+    """One days-past-due range and the report column label it counts into.
+
+    ``max_days`` is inclusive; ``None`` means unbounded (e.g. "more than
+    365 days").
+    """
+
+    label: str
+    min_days: int
+    max_days: int | None
+
+
 # Each entry becomes one sheet (named after ``sheetName``) in OUTPUT_FILE.
 # ``sheetName`` is ignored for CSV/TSV input, which has no sheets to select.
 INPUT_FILES = [
@@ -47,11 +69,16 @@ INPUT_FILES = [
     # {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "July"},
     # {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "August"},
     # {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "September"},
-    {"filePath": r"data\output\all_past_due_vulnerabilities.xlsx", "sheetName": "Today"},
+    {
+        "filePath": r"data\output\all_past_due_vulnerabilities.xlsx",
+        "sheetName": "Today",
+    },
 ]
 
 # Grouping columns, top-to-bottom nesting order, applied to every input.
-GROUP_COLUMNS: Final[list[str]] = ["saltminer.inventory_asset.attributes.appmap.application_owner_mc_2"]
+GROUP_COLUMNS: Final[list[str]] = [
+    "saltminer.inventory_asset.attributes.appmap.application_owner_mc_2"
+]
 
 OUTPUT_FILE: Final[Path] = Path("data/output/category_counts.xlsx")
 
@@ -68,9 +95,37 @@ SHEET_NAME_MAX_LENGTH: Final[int] = 31  # Excel sheet-name limit.
 
 CATEGORY_COLUMN: Final[str] = "Application Owner"
 LEVEL_COLUMN: Final[str] = "saltminer.inventory_asset.attributes.appmap.cio"
-COUNT_COLUMN: Final[str] = (
-    "Total Past Due"
-)
+COUNT_COLUMN: Final[str] = "Total Past Due"
+
+# -----------------------------------------------------------------------
+# Severity breakdown (optional). Set SEVERITY_COLUMN to None to disable.
+# -----------------------------------------------------------------------
+
+# Column holding each row's severity. Raw values are matched against
+# SEVERITY_LEVELS case-insensitively (see categorize_severity()).
+SEVERITY_COLUMN: Final[str | None] = "saltminer.attributes.severity"
+
+# One report column per entry, in the order they should appear.
+SEVERITY_LEVELS: Final[list[str]] = ["Very Critical", "Critical", "High"]
+
+# -----------------------------------------------------------------------
+# Days-past-due breakdown (optional). Set DAYS_PAST_DUE_COLUMN to None to
+# disable.
+# -----------------------------------------------------------------------
+
+# Column holding each row's numeric days-past-due value.
+DAYS_PAST_DUE_COLUMN: Final[str | None] = "saltminer.attributes.DaysPastDue"
+
+# One report column per entry, in the order they should appear. Ranges are
+# inclusive on both ends; the last bucket's max_days of None means
+# unbounded.
+DAY_BUCKETS: Final[list[DayBucket]] = [
+    {"label": "1-30 Days", "min_days": 1, "max_days": 30},
+    {"label": "31-60 Days", "min_days": 31, "max_days": 60},
+    {"label": "61-180 Days", "min_days": 61, "max_days": 180},
+    {"label": "181-365 Days", "min_days": 181, "max_days": 365},
+    {"label": ">365 Days", "min_days": 366, "max_days": None},
+]
 
 APP_NAME = "count-by-categories"
 
@@ -105,8 +160,126 @@ def _normalize_group_column(series: pd.Series, blank_label: str) -> pd.Series:
     return series.fillna(blank_label).astype(str).str.strip().replace("", blank_label)
 
 
+def categorize_severity(value: Any) -> str:
+    """Normalize one row's raw severity value for the severity breakdown.
+
+    Matching against ``SEVERITY_LEVELS`` is case-insensitive and ignores
+    surrounding whitespace, so source data like ``"critical "`` or
+    ``"CRITICAL"`` both count under the configured ``"Critical"`` column.
+    Kept separate from the report-building logic so the matching rule can
+    be changed (e.g. to map raw codes like ``"P1"`` to a severity level)
+    without touching anything else.
+
+    Args:
+        value: Raw value read from ``SEVERITY_COLUMN`` for one row.
+
+    Returns:
+        The matching entry from ``SEVERITY_LEVELS``, or the trimmed raw
+        value (uncounted in any severity column, but still counted in the
+        row's total) if it doesn't match a configured level.
+    """
+    if pd.isna(value):
+        return ""
+
+    normalized = str(value).strip()
+    for severity_level in SEVERITY_LEVELS:
+        if normalized.casefold() == severity_level.casefold():
+            return severity_level
+
+    return normalized
+
+
+def categorize_days_past_due(
+    days: Any, day_buckets: Sequence[DayBucket] = DAY_BUCKETS
+) -> str | None:
+    """Bucket one row's numeric days-past-due value for the day breakdown.
+
+    Kept separate from the report-building logic so the bucket boundaries
+    (``DAY_BUCKETS``) or this matching rule can be changed independently.
+
+    Args:
+        days: Raw value read from ``DAYS_PAST_DUE_COLUMN`` for one row.
+        day_buckets: Bucket definitions to match against, in order.
+
+    Returns:
+        The ``label`` of the first bucket ``days`` falls into (each
+        bucket's range is inclusive on both ends), or None if ``days`` is
+        missing/non-numeric or doesn't fall into any configured bucket
+        (e.g. zero or negative -- not past due).
+    """
+    numeric_days = pd.to_numeric(days, errors="coerce")
+    if pd.isna(numeric_days):
+        return None
+
+    for bucket in day_buckets:
+        if numeric_days < bucket["min_days"]:
+            continue
+        if bucket["max_days"] is not None and numeric_days > bucket["max_days"]:
+            continue
+        return bucket["label"]
+
+    return None
+
+
+def _count_row(
+    category_label: str,
+    level: int | str,
+    subset: pd.DataFrame,
+    severity_column: str | None,
+    severity_levels: Sequence[str],
+    days_past_due_column: str | None,
+    day_buckets: Sequence[DayBucket],
+) -> dict[str, object]:
+    """Build one report row: raw count plus the configured breakdowns.
+
+    Args:
+        category_label: Rendered ``Category`` cell for this row (already
+            indented for its nesting level, if applicable).
+        level: This row's ``Level`` cell (an int for a normal row, or ``""``
+            for the Grand Total row).
+        subset: The rows this report row summarizes.
+        severity_column: Column to read each row's severity from, or None
+            to skip the severity breakdown.
+        severity_levels: Severity values to break out into their own
+            columns, in order.
+        days_past_due_column: Column to read each row's days-past-due
+            value from, or None to skip the day-bucket breakdown.
+        day_buckets: Day-bucket definitions to break out into their own
+            columns, in order.
+
+    Returns:
+        A row dict with ``Level``, ``Category``, and ``Count`` keys, plus
+        one key per configured severity level and day bucket.
+    """
+    row: dict[str, object] = {
+        LEVEL_COLUMN: level,
+        CATEGORY_COLUMN: category_label,
+        COUNT_COLUMN: len(subset),
+    }
+
+    if severity_column is not None:
+        severities = subset[severity_column].map(categorize_severity)
+        for severity_level in severity_levels:
+            row[severity_level] = int((severities == severity_level).sum())
+
+    if days_past_due_column is not None:
+        buckets = subset[days_past_due_column].map(
+            lambda value: categorize_days_past_due(value, day_buckets)
+        )
+        for bucket in day_buckets:
+            row[bucket["label"]] = int((buckets == bucket["label"]).sum())
+
+    return row
+
+
 def _build_rows(
-    dataframe: pd.DataFrame, remaining_columns: Sequence[str], level: int
+    dataframe: pd.DataFrame,
+    remaining_columns: Sequence[str],
+    level: int,
+    severity_column: str | None,
+    severity_levels: Sequence[str],
+    days_past_due_column: str | None,
+    day_buckets: Sequence[DayBucket],
 ) -> list[dict[str, object]]:
     """Recursively build indented count rows for the remaining columns.
 
@@ -116,11 +289,15 @@ def _build_rows(
         remaining_columns: Grouping columns still to be applied, in
             top-to-bottom nesting order.
         level: Current nesting depth (0 = top level), used for indentation.
+        severity_column: Forwarded to ``_count_row``.
+        severity_levels: Forwarded to ``_count_row``.
+        days_past_due_column: Forwarded to ``_count_row``.
+        day_buckets: Forwarded to ``_count_row``.
 
     Returns:
-        A list of row dicts, each with ``Level``, ``Category``, and
-        ``Count`` keys, in the order they should appear in the report
-        (each row's descendants immediately follow it).
+        A list of row dicts, each with ``Level``, ``Category``, ``Count``,
+        and the configured breakdown keys, in the order they should appear
+        in the report (each row's descendants immediately follow it).
     """
     if not remaining_columns:
         return []
@@ -132,13 +309,27 @@ def _build_rows(
     for value in sorted(dataframe[column].unique()):
         value_df = dataframe[dataframe[column] == value]
         rows.append(
-            {
-                LEVEL_COLUMN: level,
-                CATEGORY_COLUMN: f"{indent}{value}",
-                COUNT_COLUMN: len(value_df),
-            }
+            _count_row(
+                f"{indent}{value}",
+                level,
+                value_df,
+                severity_column,
+                severity_levels,
+                days_past_due_column,
+                day_buckets,
+            )
         )
-        rows.extend(_build_rows(value_df, deeper_columns, level + 1))
+        rows.extend(
+            _build_rows(
+                value_df,
+                deeper_columns,
+                level + 1,
+                severity_column,
+                severity_levels,
+                days_past_due_column,
+                day_buckets,
+            )
+        )
 
     return rows
 
@@ -147,14 +338,20 @@ def count_by_categories(
     dataframe: pd.DataFrame,
     group_columns: Sequence[str],
     blank_label: str = BLANK_LABEL,
+    severity_column: str | None = SEVERITY_COLUMN,
+    severity_levels: Sequence[str] = SEVERITY_LEVELS,
+    days_past_due_column: str | None = DAYS_PAST_DUE_COLUMN,
+    day_buckets: Sequence[DayBucket] = DAY_BUCKETS,
 ) -> pd.DataFrame:
-    """Build a hierarchical raw row-count table for a dataset.
+    """Build a hierarchical row-count table for a dataset.
 
     One row is produced per distinct value at each grouping level, nested
     directly under its parent row, followed by a trailing "Grand Total"
-    row. Counts are raw row counts -- no filtering or other business logic
-    is applied here; that is expected to happen before the dataset reaches
-    this function.
+    row. The ``Count`` column is a raw row count -- no filtering or other
+    business logic is applied here; that is expected to happen before the
+    dataset reaches this function. Each row optionally also carries a
+    severity breakdown and/or a days-past-due breakdown of its underlying
+    rows (see ``severity_column`` and ``days_past_due_column``).
 
     Args:
         dataframe: The dataset to summarize. Not mutated.
@@ -164,17 +361,32 @@ def count_by_categories(
             above it.
         blank_label: Value substituted for missing/blank entries in any
             grouping column.
+        severity_column: Column to read each row's severity from and
+            categorize with ``categorize_severity``. Adds one report
+            column per entry in ``severity_levels``. Pass None to skip
+            this breakdown.
+        severity_levels: Severity values to break out into their own
+            columns, in order. Ignored if ``severity_column`` is None.
+        days_past_due_column: Column to read each row's numeric
+            days-past-due value from and categorize with
+            ``categorize_days_past_due``. Adds one report column per entry
+            in ``day_buckets``. Pass None to skip this breakdown.
+        day_buckets: Day-bucket definitions to break out into their own
+            columns, in order. Ignored if ``days_past_due_column`` is None.
 
     Returns:
         A DataFrame with columns ``Level``, ``Category``, and ``Count``,
-        one row per group value (indented under its parent by
+        plus one column per configured severity level and day bucket, one
+        row per group value (indented under its parent by
         ``INDENT_SPACES_PER_LEVEL`` spaces per level in ``Category``) plus
         a final Grand Total row.
 
     Raises:
-        ValueError: If ``group_columns`` is empty or contains duplicates.
-        KeyError: If any column in ``group_columns`` is not present in
-            ``dataframe``.
+        ValueError: If ``group_columns`` is empty or contains duplicates,
+            or if ``severity_levels``/``day_buckets`` is empty while its
+            column is configured.
+        KeyError: If any column in ``group_columns``, ``severity_column``,
+            or ``days_past_due_column`` is not present in ``dataframe``.
     """
     if not group_columns:
         raise ValueError("At least one group-by column is required.")
@@ -184,7 +396,23 @@ def count_by_categories(
             f"group_columns must not contain duplicates: {group_columns!r}"
         )
 
-    missing_columns = [col for col in group_columns if col not in dataframe.columns]
+    if severity_column is not None and not severity_levels:
+        raise ValueError(
+            "severity_levels must not be empty when severity_column is set."
+        )
+
+    if days_past_due_column is not None and not day_buckets:
+        raise ValueError(
+            "day_buckets must not be empty when days_past_due_column is set."
+        )
+
+    required_columns = list(group_columns)
+    if severity_column is not None:
+        required_columns.append(severity_column)
+    if days_past_due_column is not None:
+        required_columns.append(days_past_due_column)
+
+    missing_columns = [col for col in required_columns if col not in dataframe.columns]
     if missing_columns:
         raise KeyError(
             f"Column(s) not found in dataset: {missing_columns}. "
@@ -195,16 +423,34 @@ def count_by_categories(
     for column in group_columns:
         working[column] = _normalize_group_column(working[column], blank_label)
 
-    rows = _build_rows(working, group_columns, level=0)
+    rows = _build_rows(
+        working,
+        group_columns,
+        0,
+        severity_column,
+        severity_levels,
+        days_past_due_column,
+        day_buckets,
+    )
     rows.append(
-        {
-            LEVEL_COLUMN: "",
-            CATEGORY_COLUMN: GRAND_TOTAL_LABEL,
-            COUNT_COLUMN: len(working),
-        }
+        _count_row(
+            GRAND_TOTAL_LABEL,
+            "",
+            working,
+            severity_column,
+            severity_levels,
+            days_past_due_column,
+            day_buckets,
+        )
     )
 
-    return pd.DataFrame(rows, columns=[LEVEL_COLUMN, CATEGORY_COLUMN, COUNT_COLUMN])
+    columns = [LEVEL_COLUMN, CATEGORY_COLUMN, COUNT_COLUMN]
+    if severity_column is not None:
+        columns.extend(severity_levels)
+    if days_past_due_column is not None:
+        columns.extend(bucket["label"] for bucket in day_buckets)
+
+    return pd.DataFrame(rows, columns=columns)
 
 
 def _read_input_file(input_file: InputFile) -> pd.DataFrame:
@@ -352,21 +598,29 @@ def main() -> None:
     """Build a consolidated category-counts workbook for every input file.
 
     For every entry in ``INPUT_FILES``, reads the configured sheet, builds
-    its hierarchical count report using ``GROUP_COLUMNS``, and writes it
-    to its own sheet in ``OUTPUT_FILE``. The workbook is written
-    atomically: results are staged to a temporary file and only moved
-    into place once every sheet has been written successfully.
+    its hierarchical count report using ``GROUP_COLUMNS`` (plus the
+    configured severity and days-past-due breakdowns), and writes it to
+    its own sheet in ``OUTPUT_FILE``. The workbook is written atomically:
+    results are staged to a temporary file and only moved into place once
+    every sheet has been written successfully.
 
     Raises:
         FileNotFoundError: If a configured input file does not exist.
-        KeyError: If a configured input file is missing a group column.
+        KeyError: If a configured input file is missing a group,
+            severity, or days-past-due column.
         ValueError: If a configured input file has an unsupported
-            extension, or ``GROUP_COLUMNS`` is empty or has duplicates.
+            extension, ``GROUP_COLUMNS`` is empty or has duplicates, or
+            ``SEVERITY_LEVELS``/``DAY_BUCKETS`` is empty while its column
+            is configured.
     """
     logger.info("=" * 80)
     logger.info("Count-By-Categories SCRIPT STARTED")
     logger.info(f"Input files: {INPUT_FILES}")
     logger.info(f"Group columns: {GROUP_COLUMNS}")
+    logger.info(f"Severity column: {SEVERITY_COLUMN} (levels: {SEVERITY_LEVELS})")
+    logger.info(
+        f"Days past due column: {DAYS_PAST_DUE_COLUMN} (buckets: {DAY_BUCKETS})"
+    )
     logger.info(f"Output file: {OUTPUT_FILE}")
 
     # Build every report before touching the output file, so a bad input
@@ -379,7 +633,15 @@ def main() -> None:
         dataframe = _read_input_file(input_file)
         logger.info(f"  {len(dataframe):,} rows loaded")
 
-        report_df = count_by_categories(dataframe, GROUP_COLUMNS, BLANK_LABEL)
+        report_df = count_by_categories(
+            dataframe,
+            GROUP_COLUMNS,
+            BLANK_LABEL,
+            SEVERITY_COLUMN,
+            SEVERITY_LEVELS,
+            DAYS_PAST_DUE_COLUMN,
+            DAY_BUCKETS,
+        )
         sheet_name = _unique_sheet_name(input_file["sheetName"], used_sheet_names)
         reports.append((sheet_name, report_df))
 

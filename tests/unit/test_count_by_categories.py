@@ -15,11 +15,18 @@ import count_by_categories as cbc
 def test_single_column_counts_and_grand_total() -> None:
     dataframe = pd.DataFrame({"Owner": ["Alice", "Bob", "Alice", "Alice"]})
 
-    report = cbc.count_by_categories(dataframe, ["Owner"])
+    report = cbc.count_by_categories(
+        dataframe, ["Owner"], severity_column=None, days_past_due_column=None
+    )
 
     assert list(report[cbc.CATEGORY_COLUMN]) == ["Alice", "Bob", "Grand Total"]
     assert list(report[cbc.COUNT_COLUMN]) == [3, 1, 4]
     assert list(report[cbc.LEVEL_COLUMN]) == [0, 0, ""]
+    assert list(report.columns) == [
+        cbc.LEVEL_COLUMN,
+        cbc.CATEGORY_COLUMN,
+        cbc.COUNT_COLUMN,
+    ]
 
 
 def test_two_columns_nest_second_under_first_with_indentation() -> None:
@@ -30,7 +37,9 @@ def test_two_columns_nest_second_under_first_with_indentation() -> None:
         }
     )
 
-    report = cbc.count_by_categories(dataframe, ["Owner", "App"])
+    report = cbc.count_by_categories(
+        dataframe, ["Owner", "App"], severity_column=None, days_past_due_column=None
+    )
 
     # Alice -> Ledger, Alice -> Payments (sorted), Bob -> Payments, Grand Total.
     assert list(report[cbc.CATEGORY_COLUMN]) == [
@@ -48,7 +57,13 @@ def test_two_columns_nest_second_under_first_with_indentation() -> None:
 def test_blank_and_missing_values_grouped_under_blank_label() -> None:
     dataframe = pd.DataFrame({"Owner": ["Alice", None, "  ", "Alice"]})
 
-    report = cbc.count_by_categories(dataframe, ["Owner"], blank_label="(Blank)")
+    report = cbc.count_by_categories(
+        dataframe,
+        ["Owner"],
+        blank_label="(Blank)",
+        severity_column=None,
+        days_past_due_column=None,
+    )
 
     rows = dict(zip(report[cbc.CATEGORY_COLUMN], report[cbc.COUNT_COLUMN]))
     assert rows["(Blank)"] == 2
@@ -60,30 +75,251 @@ def test_empty_group_columns_raises_value_error() -> None:
     dataframe = pd.DataFrame({"Owner": ["Alice"]})
 
     with pytest.raises(ValueError, match="At least one group-by column"):
-        cbc.count_by_categories(dataframe, [])
+        cbc.count_by_categories(
+            dataframe, [], severity_column=None, days_past_due_column=None
+        )
 
 
 def test_duplicate_group_columns_raise_value_error() -> None:
     dataframe = pd.DataFrame({"Owner": ["Alice"]})
 
     with pytest.raises(ValueError, match="duplicates"):
-        cbc.count_by_categories(dataframe, ["Owner", "Owner"])
+        cbc.count_by_categories(
+            dataframe,
+            ["Owner", "Owner"],
+            severity_column=None,
+            days_past_due_column=None,
+        )
 
 
 def test_missing_group_column_raises_key_error() -> None:
     dataframe = pd.DataFrame({"Owner": ["Alice"]})
 
     with pytest.raises(KeyError, match="Nonexistent"):
-        cbc.count_by_categories(dataframe, ["Nonexistent"])
+        cbc.count_by_categories(
+            dataframe,
+            ["Nonexistent"],
+            severity_column=None,
+            days_past_due_column=None,
+        )
 
 
 def test_source_dataframe_is_not_mutated() -> None:
     dataframe = pd.DataFrame({"Owner": ["Alice", None]})
     original = dataframe.copy(deep=True)
 
-    cbc.count_by_categories(dataframe, ["Owner"])
+    cbc.count_by_categories(
+        dataframe, ["Owner"], severity_column=None, days_past_due_column=None
+    )
 
     pd.testing.assert_frame_equal(dataframe, original)
+
+
+# =============================================================================
+# categorize_severity()
+# =============================================================================
+
+
+def test_categorize_severity_matches_case_and_whitespace_insensitively() -> None:
+    assert cbc.categorize_severity("critical") == "Critical"
+    assert cbc.categorize_severity(" CRITICAL ") == "Critical"
+    assert cbc.categorize_severity("Very Critical") == "Very Critical"
+    assert cbc.categorize_severity("High") == "High"
+
+
+def test_categorize_severity_returns_trimmed_raw_value_when_unmatched() -> None:
+    assert cbc.categorize_severity("Medium") == "Medium"
+    assert cbc.categorize_severity("  Low  ") == "Low"
+
+
+def test_categorize_severity_returns_empty_string_for_missing_value() -> None:
+    assert cbc.categorize_severity(None) == ""
+    assert cbc.categorize_severity(float("nan")) == ""
+
+
+# =============================================================================
+# categorize_days_past_due()
+# =============================================================================
+
+
+@pytest.mark.parametrize(
+    ("days", "expected_label"),
+    [
+        (1, "1-30 Days"),
+        (30, "1-30 Days"),
+        (31, "31-60 Days"),
+        (60, "31-60 Days"),
+        (61, "61-180 Days"),
+        (180, "61-180 Days"),
+        (181, "181-365 Days"),
+        (365, "181-365 Days"),
+        (366, ">365 Days"),
+        (10_000, ">365 Days"),
+    ],
+)
+def test_categorize_days_past_due_buckets_by_inclusive_range(
+    days: int, expected_label: str
+) -> None:
+    assert cbc.categorize_days_past_due(days) == expected_label
+
+
+def test_categorize_days_past_due_accepts_numeric_strings() -> None:
+    assert cbc.categorize_days_past_due("45") == "31-60 Days"
+
+
+@pytest.mark.parametrize("days", [0, -5, "not-a-number", None, float("nan")])
+def test_categorize_days_past_due_returns_none_when_not_past_due_or_invalid(
+    days: object,
+) -> None:
+    assert cbc.categorize_days_past_due(days) is None
+
+
+def test_categorize_days_past_due_uses_custom_buckets() -> None:
+    custom_buckets: list[cbc.DayBucket] = [
+        {"label": "Fresh", "min_days": 1, "max_days": 10},
+        {"label": "Stale", "min_days": 11, "max_days": None},
+    ]
+
+    assert cbc.categorize_days_past_due(5, custom_buckets) == "Fresh"
+    assert cbc.categorize_days_past_due(500, custom_buckets) == "Stale"
+
+
+# =============================================================================
+# count_by_categories() -- severity and days-past-due breakdowns
+# =============================================================================
+
+
+def _vulnerability_dataframe() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "Owner": ["Alice", "Alice", "Alice", "Bob", "Bob"],
+            "Severity": ["Critical", "High", "High", "Very Critical", "Medium"],
+            "DaysPastDue": [10, 45, 400, 200, 1],
+        }
+    )
+
+
+def test_severity_breakdown_adds_one_column_per_configured_level() -> None:
+    report = cbc.count_by_categories(
+        _vulnerability_dataframe(),
+        ["Owner"],
+        severity_column="Severity",
+        severity_levels=["Very Critical", "Critical", "High"],
+        days_past_due_column=None,
+    )
+
+    rows = report.set_index(cbc.CATEGORY_COLUMN)
+    assert rows.loc["Alice", "Very Critical"] == 0
+    assert rows.loc["Alice", "Critical"] == 1
+    assert rows.loc["Alice", "High"] == 2
+    assert rows.loc["Bob", "Very Critical"] == 1
+    assert rows.loc["Bob", "Critical"] == 0
+    # "Medium" isn't a configured severity level, so it isn't counted in
+    # any breakdown column, but the row's total still reflects it.
+    assert rows.loc["Bob", "High"] == 0
+    assert rows.loc["Bob", cbc.COUNT_COLUMN] == 2
+    assert rows.loc["Grand Total", "Very Critical"] == 1
+    assert rows.loc["Grand Total", "Critical"] == 1
+    assert rows.loc["Grand Total", "High"] == 2
+
+
+def test_days_past_due_breakdown_adds_one_column_per_configured_bucket() -> None:
+    day_buckets: list[cbc.DayBucket] = [
+        {"label": "1-30 Days", "min_days": 1, "max_days": 30},
+        {"label": "31-60 Days", "min_days": 31, "max_days": 60},
+        {"label": ">365 Days", "min_days": 366, "max_days": None},
+    ]
+
+    report = cbc.count_by_categories(
+        _vulnerability_dataframe(),
+        ["Owner"],
+        severity_column=None,
+        days_past_due_column="DaysPastDue",
+        day_buckets=day_buckets,
+    )
+
+    rows = report.set_index(cbc.CATEGORY_COLUMN)
+    assert rows.loc["Alice", "1-30 Days"] == 1
+    assert rows.loc["Alice", "31-60 Days"] == 1
+    assert rows.loc["Alice", ">365 Days"] == 1
+    assert rows.loc["Bob", "1-30 Days"] == 1  # DaysPastDue=1
+    assert rows.loc["Bob", "31-60 Days"] == 0
+    assert rows.loc["Bob", ">365 Days"] == 0
+    assert rows.loc["Grand Total", "1-30 Days"] == 2
+    assert rows.loc["Grand Total", ">365 Days"] == 1
+
+
+def test_severity_and_days_past_due_breakdowns_combine_with_expected_column_order() -> (
+    None
+):
+    report = cbc.count_by_categories(
+        _vulnerability_dataframe(),
+        ["Owner"],
+        severity_column="Severity",
+        severity_levels=["Very Critical", "Critical", "High"],
+        days_past_due_column="DaysPastDue",
+        day_buckets=[
+            {"label": "1-30 Days", "min_days": 1, "max_days": 30},
+            {"label": ">30 Days", "min_days": 31, "max_days": None},
+        ],
+    )
+
+    assert list(report.columns) == [
+        cbc.LEVEL_COLUMN,
+        cbc.CATEGORY_COLUMN,
+        cbc.COUNT_COLUMN,
+        "Very Critical",
+        "Critical",
+        "High",
+        "1-30 Days",
+        ">30 Days",
+    ]
+
+
+def test_missing_severity_column_raises_key_error() -> None:
+    dataframe = pd.DataFrame({"Owner": ["Alice"]})
+
+    with pytest.raises(KeyError, match="Severity"):
+        cbc.count_by_categories(
+            dataframe,
+            ["Owner"],
+            severity_column="Severity",
+            days_past_due_column=None,
+        )
+
+
+def test_missing_days_past_due_column_raises_key_error() -> None:
+    dataframe = pd.DataFrame({"Owner": ["Alice"]})
+
+    with pytest.raises(KeyError, match="DaysPastDue"):
+        cbc.count_by_categories(
+            dataframe,
+            ["Owner"],
+            severity_column=None,
+            days_past_due_column="DaysPastDue",
+        )
+
+
+def test_empty_severity_levels_with_severity_column_raises_value_error() -> None:
+    with pytest.raises(ValueError, match="severity_levels"):
+        cbc.count_by_categories(
+            _vulnerability_dataframe(),
+            ["Owner"],
+            severity_column="Severity",
+            severity_levels=[],
+            days_past_due_column=None,
+        )
+
+
+def test_empty_day_buckets_with_days_past_due_column_raises_value_error() -> None:
+    with pytest.raises(ValueError, match="day_buckets"):
+        cbc.count_by_categories(
+            _vulnerability_dataframe(),
+            ["Owner"],
+            severity_column=None,
+            days_past_due_column="DaysPastDue",
+            day_buckets=[],
+        )
 
 
 # =============================================================================
