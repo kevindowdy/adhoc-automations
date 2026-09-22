@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `count_by_categories.py`: the internal nesting-level marker (previously
+  written as a misleadingly-named
+  `saltminer.inventory_asset.attributes.appmap.cio` column, always `0` with
+  the current single-level `GROUP_COLUMNS` config) is no longer written to
+  the output workbook. It's still tracked internally for row shading and
+  category indentation, it just doesn't appear as a column anymore.
+
 ### Added
 
 - `count_by_categories.py`: uses vulnerability.severity as the severity identification field

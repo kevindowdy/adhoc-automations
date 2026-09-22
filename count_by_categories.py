@@ -539,9 +539,10 @@ def _style_worksheet(worksheet, report_df: pd.DataFrame) -> None:
     """Apply header, indentation, and Grand Total styling to a report sheet.
 
     Args:
-        worksheet: The openpyxl worksheet the report was just written to.
-        report_df: The report DataFrame that was written, used to look up
-            each row's nesting level for styling.
+        worksheet: The openpyxl worksheet the report was just written to
+            (with ``LEVEL_COLUMN`` already excluded -- see ``main()``).
+        report_df: The full report DataFrame, including ``LEVEL_COLUMN``,
+            used to look up each row's nesting level for styling.
     """
     from openpyxl.styles import Alignment, Font, PatternFill
     from openpyxl.utils import get_column_letter
@@ -549,6 +550,10 @@ def _style_worksheet(worksheet, report_df: pd.DataFrame) -> None:
     DARK_BLUE = "1F4E79"
     LIGHT_BLUE = "D6E4F0"
     WHITE = "FFFFFF"
+
+    # LEVEL_COLUMN is dropped before writing (see main()), so CATEGORY_COLUMN
+    # is the first column actually written to the worksheet.
+    CATEGORY_WORKSHEET_COLUMN_IDX = 1
 
     for cell in worksheet[1]:
         cell.fill = PatternFill(
@@ -577,18 +582,20 @@ def _style_worksheet(worksheet, report_df: pd.DataFrame) -> None:
                 )
                 cell.font = Font(bold=True)
                 cell.alignment = Alignment(horizontal="center")
-                if col_idx == 2:
+                if col_idx == CATEGORY_WORKSHEET_COLUMN_IDX:
                     cell.alignment = Alignment(horizontal="left")
             else:
                 cell.alignment = Alignment(horizontal="center")
-                if col_idx == 2:
+                if col_idx == CATEGORY_WORKSHEET_COLUMN_IDX:
                     cell.alignment = Alignment(horizontal="left", indent=int(level))
 
     for col_idx, col_cells in enumerate(worksheet.columns, start=1):
         max_len = max((len(str(cell.value or "")) for cell in col_cells), default=0)
         col_letter = get_column_letter(col_idx)
         worksheet.column_dimensions[col_letter].width = (
-            min(max_len + 3, 60) if col_idx == 2 else max(9, min(max_len + 2, 18))
+            min(max_len + 3, 60)
+            if col_idx == CATEGORY_WORKSHEET_COLUMN_IDX
+            else max(9, min(max_len + 2, 18))
         )
 
     worksheet.freeze_panes = "A2"
@@ -656,7 +663,12 @@ def main() -> None:
     try:
         with pd.ExcelWriter(temp_output_file, engine="openpyxl") as writer:
             for sheet_name, report_df in reports:
-                report_df.to_excel(writer, sheet_name=sheet_name, index=False)
+                # LEVEL_COLUMN is an internal nesting-depth marker, not a
+                # real data column -- keep it out of the written workbook,
+                # but hand the full report_df (with levels) to the styler
+                # below so row shading/indentation can still be computed.
+                written_df = report_df.drop(columns=[LEVEL_COLUMN])
+                written_df.to_excel(writer, sheet_name=sheet_name, index=False)
                 _style_worksheet(writer.sheets[sheet_name], report_df)
 
         temp_output_file.replace(OUTPUT_FILE)
