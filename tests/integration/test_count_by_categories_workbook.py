@@ -39,6 +39,8 @@ def test_main_writes_one_sheet_per_input_file(tmp_path, monkeypatch) -> None:
     )
     monkeypatch.setattr(cbc, "GROUP_COLUMNS", ["Owner"])
     monkeypatch.setattr(cbc, "OUTPUT_FILE", output_file)
+    monkeypatch.setattr(cbc, "SEVERITY_COLUMN", None)
+    monkeypatch.setattr(cbc, "DAYS_PAST_DUE_COLUMN", None)
 
     cbc.main()
 
@@ -73,6 +75,8 @@ def test_main_writes_output_atomically_leaving_no_temp_file(
     )
     monkeypatch.setattr(cbc, "GROUP_COLUMNS", ["Owner"])
     monkeypatch.setattr(cbc, "OUTPUT_FILE", output_file)
+    monkeypatch.setattr(cbc, "SEVERITY_COLUMN", None)
+    monkeypatch.setattr(cbc, "DAYS_PAST_DUE_COLUMN", None)
 
     cbc.main()
 
@@ -93,6 +97,8 @@ def test_main_raises_and_leaves_no_output_when_an_input_file_is_missing(
     )
     monkeypatch.setattr(cbc, "GROUP_COLUMNS", ["Owner"])
     monkeypatch.setattr(cbc, "OUTPUT_FILE", output_file)
+    monkeypatch.setattr(cbc, "SEVERITY_COLUMN", None)
+    monkeypatch.setattr(cbc, "DAYS_PAST_DUE_COLUMN", None)
 
     try:
         cbc.main()
@@ -102,3 +108,62 @@ def test_main_raises_and_leaves_no_output_when_an_input_file_is_missing(
 
     assert not output_file.exists()
     assert not any(output_file.parent.glob("*.tmp"))
+
+
+def test_main_writes_severity_and_days_past_due_breakdown_columns(
+    tmp_path, monkeypatch
+) -> None:
+    csv_file = tmp_path / "vulnerabilities.csv"
+    csv_file.write_text(
+        "Owner,Severity,DaysPastDue\n"
+        "Alice,Critical,10\n"
+        "Alice,High,45\n"
+        "Alice,High,400\n"
+        "Bob,Very Critical,200\n"
+        "Bob,Medium,1\n"
+    )
+
+    output_file = tmp_path / "output" / "category_counts.xlsx"
+
+    monkeypatch.setattr(
+        cbc, "INPUT_FILES", [{"filePath": str(csv_file), "sheetName": "Today"}]
+    )
+    monkeypatch.setattr(cbc, "GROUP_COLUMNS", ["Owner"])
+    monkeypatch.setattr(cbc, "OUTPUT_FILE", output_file)
+    monkeypatch.setattr(cbc, "SEVERITY_COLUMN", "Severity")
+    monkeypatch.setattr(cbc, "SEVERITY_LEVELS", ["Very Critical", "Critical", "High"])
+    monkeypatch.setattr(cbc, "DAYS_PAST_DUE_COLUMN", "DaysPastDue")
+
+    cbc.main()
+
+    workbook = pd.read_excel(output_file, sheet_name=None)
+    report = workbook["Today"]
+
+    assert list(report.columns) == [
+        cbc.LEVEL_COLUMN,
+        cbc.CATEGORY_COLUMN,
+        cbc.COUNT_COLUMN,
+        "Very Critical",
+        "Critical",
+        "High",
+        "1-30 Days",
+        "31-60 Days",
+        "61-180 Days",
+        "181-365 Days",
+        ">365 Days",
+    ]
+
+    rows = report.set_index(cbc.CATEGORY_COLUMN)
+    assert rows.loc["Alice", cbc.COUNT_COLUMN] == 3
+    assert rows.loc["Alice", "Critical"] == 1
+    assert rows.loc["Alice", "High"] == 2
+    assert rows.loc["Alice", "1-30 Days"] == 1
+    assert rows.loc["Alice", "31-60 Days"] == 1
+    assert rows.loc["Alice", ">365 Days"] == 1
+
+    assert rows.loc["Bob", cbc.COUNT_COLUMN] == 2
+    assert rows.loc["Bob", "Very Critical"] == 1
+    assert rows.loc["Bob", "181-365 Days"] == 1
+    assert rows.loc["Bob", "1-30 Days"] == 1
+
+    assert rows.loc["Grand Total", cbc.COUNT_COLUMN] == 5

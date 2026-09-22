@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `count_by_categories.py`: each report row can now optionally carry a
+  severity breakdown and/or a days-past-due breakdown alongside the raw
+  count, e.g. `Application Owner | Total Past Due | Very Critical |
+  Critical | High | 1-30 Days | 31-60 Days | 61-180 Days | 181-365 Days |
+  >365 Days`. Both are independently configurable and optional:
+  `SEVERITY_COLUMN`/`SEVERITY_LEVELS` control the severity columns and
+  `DAYS_PAST_DUE_COLUMN`/`DAY_BUCKETS` control the day-bucket columns
+  (each bucket is an inclusive `{label, min_days, max_days}` range, with
+  `max_days: None` for an open-ended top bucket); setting either column
+  constant to `None` skips that breakdown entirely. The categorization
+  logic lives in two standalone, independently testable functions --
+  `categorize_severity()` (case-insensitive match against
+  `SEVERITY_LEVELS`) and `categorize_days_past_due()` (buckets a numeric
+  days-past-due value) -- so either can be tweaked without touching the
+  report-building logic.
+
 ### Changed
 
 - `count_by_categories.py`: converted from a CLI tool (`--columns`,
