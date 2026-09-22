@@ -103,7 +103,7 @@ COUNT_COLUMN: Final[str] = "Total Past Due"
 
 # Column holding each row's severity. Raw values are matched against
 # SEVERITY_LEVELS case-insensitively (see categorize_severity()).
-SEVERITY_COLUMN: Final[str | None] = "saltminer.attributes.severity"
+SEVERITY_COLUMN: Final[str | None] = "vulnerability.severity"
 
 # One report column per entry, in the order they should appear.
 SEVERITY_LEVELS: Final[list[str]] = ["Very Critical", "Critical", "High"]

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `count_by_categories.py`: uses vulnerability.severity as the severity identification field
 - `count_by_categories.py`: each report row can now optionally carry a
   severity breakdown and/or a days-past-due breakdown alongside the raw
   count, e.g. `Application Owner | Total Past Due | Very Critical |
