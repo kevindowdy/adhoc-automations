@@ -62,6 +62,44 @@ def test_main_writes_one_sheet_per_input_file(tmp_path, monkeypatch) -> None:
     assert list(raw2[cbc.COUNT_COLUMN]) == [1, 1]
 
 
+def test_main_indents_category_column_not_count_column(tmp_path, monkeypatch) -> None:
+    """Regression test: LEVEL_COLUMN is dropped from the written sheet, so
+    CATEGORY_COLUMN becomes the first worksheet column. _style_worksheet's
+    indentation logic must target that first column, not the second."""
+    csv_file = tmp_path / "team.csv"
+    csv_file.write_text("Owner,App\nAlice,Payments\nAlice,Ledger\nBob,Payments\n")
+
+    output_file = tmp_path / "output" / "category_counts.xlsx"
+
+    monkeypatch.setattr(
+        cbc, "INPUT_FILES", [{"filePath": str(csv_file), "sheetName": "Team"}]
+    )
+    monkeypatch.setattr(cbc, "GROUP_COLUMNS", ["Owner", "App"])
+    monkeypatch.setattr(cbc, "OUTPUT_FILE", output_file)
+    monkeypatch.setattr(cbc, "SEVERITY_COLUMN", None)
+    monkeypatch.setattr(cbc, "DAYS_PAST_DUE_COLUMN", None)
+
+    cbc.main()
+
+    workbook = pd.read_excel(output_file, sheet_name=None)
+    report = workbook["Team"]
+    assert list(report.columns) == [cbc.CATEGORY_COLUMN, cbc.COUNT_COLUMN]
+
+    from openpyxl import load_workbook
+
+    worksheet = load_workbook(output_file)["Team"]
+
+    # Row 2 is "Alice" (top-level, level 0); row 3 is her first nested
+    # child, indented one level. Column A is Category, column B is Count.
+    nested_category_cell = worksheet["A3"]
+    nested_count_cell = worksheet["B3"]
+
+    assert nested_category_cell.alignment.horizontal == "left"
+    assert nested_category_cell.alignment.indent == 1
+    assert nested_count_cell.alignment.horizontal == "center"
+    assert nested_count_cell.alignment.indent in (0, None)
+
+
 def test_main_writes_output_atomically_leaving_no_temp_file(
     tmp_path, monkeypatch
 ) -> None:
@@ -139,8 +177,8 @@ def test_main_writes_severity_and_days_past_due_breakdown_columns(
     workbook = pd.read_excel(output_file, sheet_name=None)
     report = workbook["Today"]
 
+    assert cbc.LEVEL_COLUMN not in report.columns
     assert list(report.columns) == [
-        cbc.LEVEL_COLUMN,
         cbc.CATEGORY_COLUMN,
         cbc.COUNT_COLUMN,
         "Very Critical",
