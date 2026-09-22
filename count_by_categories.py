@@ -1,25 +1,25 @@
-"""Build a hierarchical row-count table from any ordered list of columns.
+"""Build hierarchical row-count tables for a configured list of datasets.
 
 Generalizes the top-level / indented-sub-level rollup used in the
 vulnerability tracking report (one grouping column nested under another,
 each row showing how many raw rows match it) to any dataset and any
-number of grouping columns, provided dynamically instead of hardcoded.
+number of grouping columns.
 
-Each grouping column becomes one level of the table: a row is emitted for
-every distinct value at that level, indented under its parent, with a
-count of the raw rows that match the values seen so far. A single
-"Grand Total" row closes out the table. No filtering, date parsing, or
-categorization logic lives here -- callers are expected to filter the
-dataset before it reaches this script.
+Each entry in ``INPUT_FILES`` names a source file and the sheet to read
+from it. Every entry is summarized independently using the same
+``GROUP_COLUMNS`` and written to its own sheet in a single consolidated
+output workbook, mirroring the per-month sheet layout used by
+``filter_past_due_vulnerabilities.py``. No filtering, date parsing, or
+categorization logic lives here -- input files are expected to already
+contain only the rows that belong in the count.
 """
 
 from __future__ import annotations
 
-import argparse
 import logging
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Final
+from typing import Final, TypedDict
 
 import pandas as pd
 
@@ -27,21 +27,50 @@ import pandas as pd
 # CONFIGURATION
 # =============================================================================
 
-# Directory used to build a default output path when --output is not given.
-DEFAULT_OUTPUT_DIR: Final[Path] = Path("data/output")
+
+class InputFile(TypedDict):
+    """One dataset to summarize: a file path and the sheet to read from it."""
+
+    filePath: str
+    sheetName: str
+
+
+# Each entry becomes one sheet (named after ``sheetName``) in OUTPUT_FILE.
+# ``sheetName`` is ignored for CSV/TSV input, which has no sheets to select.
+INPUT_FILES = [
+    # {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "January"},
+    # {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "February"},
+    # {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "March"},
+    # {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "April"},
+    # {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "May"},
+    # {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "June"},
+    # {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "July"},
+    # {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "August"},
+    # {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "September"},
+    {"filePath": r"data\output\all_past_due_vulnerabilities.xlsx", "sheetName": "Today"},
+]
+
+# Grouping columns, top-to-bottom nesting order, applied to every input.
+GROUP_COLUMNS: Final[list[str]] = ["saltminer.inventory_asset.attributes.appmap.application_owner_mc_2"]
+
+OUTPUT_FILE: Final[Path] = Path("data/output/category_counts.xlsx")
 
 # Placeholder substituted for missing/blank values in a grouping column so
 # they still get their own counted row instead of being silently dropped.
-DEFAULT_BLANK_LABEL: Final[str] = "(Blank)"
+BLANK_LABEL: Final[str] = "(Blank)"
 
 # How far each nested level is indented in the rendered "Category" text.
 INDENT_SPACES_PER_LEVEL: Final[int] = 2
 
 GRAND_TOTAL_LABEL: Final[str] = "Grand Total"
 
-CATEGORY_COLUMN: Final[str] = "MC2"
+SHEET_NAME_MAX_LENGTH: Final[int] = 31  # Excel sheet-name limit.
+
+CATEGORY_COLUMN: Final[str] = "Application Owner"
 LEVEL_COLUMN: Final[str] = "saltminer.inventory_asset.attributes.appmap.cio"
-COUNT_COLUMN: Final[str] = "saltminer.inventory_asset.attributes.appmap.application_owner_mc_2"
+COUNT_COLUMN: Final[str] = (
+    "Total Past Due"
+)
 
 APP_NAME = "count-by-categories"
 
@@ -117,7 +146,7 @@ def _build_rows(
 def count_by_categories(
     dataframe: pd.DataFrame,
     group_columns: Sequence[str],
-    blank_label: str = DEFAULT_BLANK_LABEL,
+    blank_label: str = BLANK_LABEL,
 ) -> pd.DataFrame:
     """Build a hierarchical raw row-count table for a dataset.
 
@@ -178,43 +207,89 @@ def count_by_categories(
     return pd.DataFrame(rows, columns=[LEVEL_COLUMN, CATEGORY_COLUMN, COUNT_COLUMN])
 
 
-def _read_dataset(path: Path, sheet_name: str | int | None) -> pd.DataFrame:
-    """Read a CSV or Excel dataset into a string-typed DataFrame.
+def _read_input_file(input_file: InputFile) -> pd.DataFrame:
+    """Validate and read one configured input file into a string-typed DataFrame.
+
+    Every column is read as string dtype so grouping treats equal-looking
+    values consistently.
 
     Args:
-        path: Path to the input file. Must exist.
-        sheet_name: Sheet name or zero-based index to read when ``path``
-            is an Excel workbook. Ignored for CSV/TSV input. Defaults to
-            the first sheet when ``None``.
+        input_file: Entry from ``INPUT_FILES`` with a ``filePath`` and the
+            ``sheetName`` to read (ignored for CSV/TSV input).
 
     Returns:
-        The loaded dataset, with every column read as string dtype so
-        grouping treats equal-looking values consistently.
+        The parsed dataset.
 
     Raises:
-        FileNotFoundError: If ``path`` does not exist.
-        ValueError: If ``path`` has an unsupported extension.
+        FileNotFoundError: If ``filePath`` does not exist.
+        ValueError: If ``filePath`` has an unsupported extension.
     """
-    if not path.is_file():
-        raise FileNotFoundError(f"Input file not found: {path}")
+    file_path = Path(input_file["filePath"])
+    if not file_path.is_file():
+        raise FileNotFoundError(f"Input file not found: {file_path}")
 
-    suffix = path.suffix.lower()
+    suffix = file_path.suffix.lower()
+    logger.info(f"Reading {file_path} [{input_file['sheetName']}]")
+
     if suffix == ".csv":
-        return pd.read_csv(path, dtype=str)
+        return pd.read_csv(file_path, dtype=str)
     if suffix == ".tsv":
-        return pd.read_csv(path, dtype=str, sep="\t")
+        return pd.read_csv(file_path, dtype=str, sep="\t")
     if suffix in (".xlsx", ".xls"):
-        return pd.read_excel(
-            path, dtype=str, sheet_name=sheet_name if sheet_name is not None else 0
-        )
+        return pd.read_excel(file_path, dtype=str, sheet_name=input_file["sheetName"])
 
     raise ValueError(
-        f"Unsupported input file extension {suffix!r} for {path}. "
+        f"Unsupported input file extension {suffix!r} for {file_path}. "
         "Supported extensions: .csv, .tsv, .xlsx, .xls"
     )
 
 
-def _style_workbook(worksheet, report_df: pd.DataFrame) -> None:
+def _sanitize_sheet_name(name: str) -> str:
+    """Strip characters Excel disallows in sheet names and cap the length.
+
+    Args:
+        name: Desired sheet name.
+
+    Returns:
+        A sheet name safe to pass to an Excel writer, falling back to
+        ``"Sheet"`` if nothing valid remains.
+    """
+    invalid_characters = r"[]:*?/\\"
+    sanitized = "".join(
+        character for character in name if character not in invalid_characters
+    )
+    return sanitized[:SHEET_NAME_MAX_LENGTH] or "Sheet"
+
+
+def _unique_sheet_name(desired_name: str, used_names: set[str]) -> str:
+    """Disambiguate a sheet name against names already used in the workbook.
+
+    Args:
+        desired_name: The sheet name to use if it is not already taken.
+        used_names: Sheet names already assigned in the output workbook.
+            Mutated to add the returned name.
+
+    Returns:
+        ``desired_name`` if unused, otherwise ``desired_name`` with a
+        numeric suffix (``" (2)"``, ``" (3)"``, ...) making it unique,
+        truncated to stay within Excel's sheet-name length limit.
+    """
+    sanitized = _sanitize_sheet_name(desired_name)
+    if sanitized not in used_names:
+        used_names.add(sanitized)
+        return sanitized
+
+    suffix_number = 2
+    while True:
+        suffix = f" ({suffix_number})"
+        candidate = sanitized[: SHEET_NAME_MAX_LENGTH - len(suffix)] + suffix
+        if candidate not in used_names:
+            used_names.add(candidate)
+            return candidate
+        suffix_number += 1
+
+
+def _style_worksheet(worksheet, report_df: pd.DataFrame) -> None:
     """Apply header, indentation, and Grand Total styling to a report sheet.
 
     Args:
@@ -273,142 +348,60 @@ def _style_workbook(worksheet, report_df: pd.DataFrame) -> None:
     worksheet.freeze_panes = "A2"
 
 
-def save_report(report_df: pd.DataFrame, output_path: Path) -> None:
-    """Write a report DataFrame to CSV or styled Excel, atomically.
+def main() -> None:
+    """Build a consolidated category-counts workbook for every input file.
 
-    The file is staged to a temporary path in the same directory and only
-    moved into place once the write completes successfully, so a failed
-    or interrupted write never leaves a partial file at ``output_path``.
-
-    Args:
-        report_df: The report to write, as returned by
-            :func:`count_by_categories`.
-        output_path: Destination path. Extension (``.csv`` or ``.xlsx``)
-            selects the output format.
+    For every entry in ``INPUT_FILES``, reads the configured sheet, builds
+    its hierarchical count report using ``GROUP_COLUMNS``, and writes it
+    to its own sheet in ``OUTPUT_FILE``. The workbook is written
+    atomically: results are staged to a temporary file and only moved
+    into place once every sheet has been written successfully.
 
     Raises:
-        ValueError: If ``output_path`` has an unsupported extension.
+        FileNotFoundError: If a configured input file does not exist.
+        KeyError: If a configured input file is missing a group column.
+        ValueError: If a configured input file has an unsupported
+            extension, or ``GROUP_COLUMNS`` is empty or has duplicates.
     """
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    suffix = output_path.suffix.lower()
-    temp_output_path = output_path.with_suffix(f"{output_path.suffix}.tmp")
-
-    try:
-        if suffix == ".csv":
-            report_df.to_csv(temp_output_path, index=False)
-        elif suffix == ".xlsx":
-            with pd.ExcelWriter(temp_output_path, engine="openpyxl") as writer:
-                report_df.to_excel(writer, index=False, sheet_name="Category Counts")
-                _style_workbook(writer.sheets["Category Counts"], report_df)
-        else:
-            raise ValueError(
-                f"Unsupported output file extension {suffix!r} for {output_path}. "
-                "Supported extensions: .csv, .xlsx"
-            )
-
-        temp_output_path.replace(output_path)
-    finally:
-        temp_output_path.unlink(missing_ok=True)
-
-
-def _parse_sheet_name(value: str) -> str | int:
-    """Parse a --sheet-name CLI value as a sheet index when numeric.
-
-    Args:
-        value: Raw CLI argument string.
-
-    Returns:
-        ``int(value)`` if it looks like a plain integer, otherwise the
-        string unchanged (treated as a sheet name by pandas).
-    """
-    return int(value) if value.lstrip("-").isdigit() else value
-
-
-def _default_output_path(input_file: Path) -> Path:
-    """Build a default output path from the input file's name.
-
-    Args:
-        input_file: The dataset being summarized.
-
-    Returns:
-        ``DEFAULT_OUTPUT_DIR / "<input stem>_category_counts.xlsx"``.
-    """
-    return DEFAULT_OUTPUT_DIR / f"{input_file.stem}_category_counts.xlsx"
-
-
-def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    """Parse command-line arguments for the script.
-
-    Args:
-        argv: Argument list to parse, or ``None`` to use ``sys.argv``.
-
-    Returns:
-        The parsed arguments.
-    """
-    parser = argparse.ArgumentParser(
-        description=(
-            "Count raw rows in a dataset, grouped by any ordered list of "
-            "columns, with each column nested under the one before it."
-        )
-    )
-    parser.add_argument(
-        "input_file", type=Path, help="Path to a CSV, TSV, or Excel dataset."
-    )
-    parser.add_argument(
-        "--columns",
-        "-c",
-        nargs="+",
-        required=True,
-        metavar="COLUMN",
-        help="Grouping columns, top-to-bottom nesting order (e.g. --columns Owner App).",
-    )
-    parser.add_argument(
-        "--output",
-        "-o",
-        type=Path,
-        default=None,
-        help=f"Output path (.csv or .xlsx). Defaults to {DEFAULT_OUTPUT_DIR}/<input stem>_category_counts.xlsx",
-    )
-    parser.add_argument(
-        "--sheet-name",
-        type=_parse_sheet_name,
-        default=None,
-        help="Sheet name or 0-based index to read for Excel input (defaults to the first sheet).",
-    )
-    parser.add_argument(
-        "--blank-label",
-        default=DEFAULT_BLANK_LABEL,
-        help=f"Label used for missing/blank grouping values (default: {DEFAULT_BLANK_LABEL!r}).",
-    )
-    return parser.parse_args(argv)
-
-
-def main(argv: Sequence[str] | None = None) -> None:
-    """Load a dataset, build the hierarchical count report, and save it.
-
-    Args:
-        argv: Argument list to parse, or ``None`` to use ``sys.argv``.
-    """
-    args = parse_args(argv)
-    output_path = args.output or _default_output_path(args.input_file)
-
     logger.info("=" * 80)
     logger.info("Count-By-Categories SCRIPT STARTED")
-    logger.info(f"Input file: {args.input_file}")
-    logger.info(f"Group columns: {args.columns}")
-    logger.info(f"Output file: {output_path}")
+    logger.info(f"Input files: {INPUT_FILES}")
+    logger.info(f"Group columns: {GROUP_COLUMNS}")
+    logger.info(f"Output file: {OUTPUT_FILE}")
 
-    dataframe = _read_dataset(args.input_file, args.sheet_name)
-    logger.info(f"  {len(dataframe):,} rows loaded")
+    # Build every report before touching the output file, so a bad input
+    # (missing file, missing column, ...) fails loudly instead of leaving a
+    # half-written workbook or an empty one behind.
+    used_sheet_names: set[str] = set()
+    reports: list[tuple[str, pd.DataFrame]] = []
 
-    report_df = count_by_categories(dataframe, args.columns, args.blank_label)
-    logger.info(
-        f"Report built: {len(report_df):,} rows across {len(args.columns)} level(s)"
-    )
+    for input_file in INPUT_FILES:
+        dataframe = _read_input_file(input_file)
+        logger.info(f"  {len(dataframe):,} rows loaded")
 
-    save_report(report_df, output_path)
-    logger.info(f"Report saved to {output_path}")
+        report_df = count_by_categories(dataframe, GROUP_COLUMNS, BLANK_LABEL)
+        sheet_name = _unique_sheet_name(input_file["sheetName"], used_sheet_names)
+        reports.append((sheet_name, report_df))
 
+        logger.info(
+            f"  Report built: {len(report_df):,} rows across "
+            f"{len(GROUP_COLUMNS)} level(s) -> sheet '{sheet_name}'"
+        )
+
+    OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
+    temp_output_file = OUTPUT_FILE.with_suffix(f"{OUTPUT_FILE.suffix}.tmp")
+
+    try:
+        with pd.ExcelWriter(temp_output_file, engine="openpyxl") as writer:
+            for sheet_name, report_df in reports:
+                report_df.to_excel(writer, sheet_name=sheet_name, index=False)
+                _style_worksheet(writer.sheets[sheet_name], report_df)
+
+        temp_output_file.replace(OUTPUT_FILE)
+    finally:
+        temp_output_file.unlink(missing_ok=True)
+
+    logger.info(f"Wrote consolidated workbook to {OUTPUT_FILE}")
     logger.info("SCRIPT COMPLETED SUCCESSFULLY")
 
 
