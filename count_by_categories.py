@@ -60,17 +60,16 @@ class DayBucket(TypedDict):
 # Each entry becomes one sheet (named after ``sheetName``) in OUTPUT_FILE.
 # ``sheetName`` is ignored for CSV/TSV input, which has no sheets to select.
 INPUT_FILES = [
-    # {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "January"},
-    # {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "February"},
-    # {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "March"},
-    # {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "April"},
-    # {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "May"},
-    # {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "June"},
-    # {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "July"},
-    # {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "August"},
-    # {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "September"},
+    {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "January"},
+    {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "February"},
+    {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "March"},
+    {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "April"},
+    {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "May"},
+    {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "June"},
+    {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "July"},
+    {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "August"},
     {
-        "filePath": r"data\output\all_past_due_vulnerabilities.xlsx",
+        "filePath": r"data\output\past_due_vulnerabilities.xlsx",
         "sheetName": "Today",
     },
 ]
