@@ -37,8 +37,12 @@ class InputFile(TypedDict):
 
 INPUT_FILES: Final[list[InputFile]] = [
     {
-        "filePath": r"C:\Users\fbfepde\Downloads\FIG Closed Vulnerabilities_20260922.xlsx",
+        "filePath": r"C:\Users\fbfepde\Documents\Temporary\FIG_Closed_Vulnerabilities\FIG_Closed_Vulnerabilities_20260921.parquet",
         "label": "September",
+    },
+        {
+        "filePath": r"C:\Users\fbfepde\Documents\Temporary\FIG_Closed_Vulnerabilities\FIG Closed Vulnerabilities_20260101_RemovedVulnsOpenedAfterJan1.xlsx",
+        "label": "January",
     },
 ]
 
