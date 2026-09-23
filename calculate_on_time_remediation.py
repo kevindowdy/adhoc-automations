@@ -236,10 +236,16 @@ def _read_input_file(input_file: InputFile) -> pd.DataFrame:
         return pd.read_csv(file_path, dtype=str, sep="\t")
     if suffix in (".xlsx", ".xls"):
         return pd.read_excel(file_path, dtype=str)
+    if suffix == ".parquet":
+        # Parquet is a typed columnar format, so no dtype=str coercion here
+        # (unlike the CSV/Excel branches above) -- filter_to_configured_severities
+        # and calculate_on_time_remediation_stats already coerce the columns
+        # they read regardless of the input dtype.
+        return pd.read_parquet(file_path)
 
     raise ValueError(
         f"Unsupported input file extension {suffix!r} for {file_path}. "
-        "Supported extensions: .csv, .tsv, .xlsx, .xls"
+        "Supported extensions: .csv, .tsv, .xlsx, .xls, .parquet"
     )
 
 

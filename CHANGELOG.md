@@ -21,12 +21,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   for September: 42 Critical/High vulnerabilities have been remediated. 5
   were remediated late and 37 were remediated on time. The on-time
   remediation rate is 37/42 (88.1%)." Nothing is written to disk -- the
-  deliverable is the logged summary, not a report file.
+  deliverable is the logged summary, not a report file. Input files may be
+  `.csv`, `.tsv`, `.xlsx`, `.xls`, or `.parquet`.
 - `tests/unit/test_calculate_on_time_remediation.py` and
   `tests/integration/test_calculate_on_time_remediation_logging.py`: unit
   coverage for the severity filter, stats calculation, and summary
-  formatting, plus an end-to-end integration test that runs `main()`
-  against real CSV/Excel input files and asserts on the logged summaries.
+  formatting, plus end-to-end integration tests that run `main()` against
+  real CSV/Excel/Parquet input files and assert on the logged summaries.
 
 ### Fixed
 

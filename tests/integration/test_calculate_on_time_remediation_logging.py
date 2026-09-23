@@ -62,6 +62,35 @@ def test_main_logs_one_summary_per_input_file_independently(
     )
 
 
+def test_main_reads_parquet_input_files(tmp_path, monkeypatch, caplog) -> None:
+    # 2 Critical/High vulns, 1 late (DaysPastDue=12) and 1 on time
+    # (DaysPastDue=-2). A Low-severity row must be excluded from the stats.
+    parquet_file = tmp_path / "december.parquet"
+    pd.DataFrame(
+        {
+            "vulnerability.severity": ["Critical", "High", "Low"],
+            "saltminer.attributes.DaysPastDue": [12, -2, 99],
+        }
+    ).to_parquet(parquet_file)
+
+    monkeypatch.setattr(
+        otr, "INPUT_FILES", [{"filePath": str(parquet_file), "label": "December"}]
+    )
+    monkeypatch.setattr(otr, "SEVERITY_LEVELS", ["Critical", "High"])
+
+    with caplog.at_level(logging.INFO, logger="calculate_on_time_remediation"):
+        otr.main()
+
+    messages = [record.message for record in caplog.records]
+
+    assert any(
+        "As of today, for December: 2 Critical/High vulnerabilities have "
+        "been remediated. 1 were remediated late and 1 were remediated on "
+        "time. The on-time remediation rate is 1/2 (50.0%)." in message
+        for message in messages
+    )
+
+
 def test_main_reports_no_vulnerabilities_found_when_file_has_no_matches(
     tmp_path, monkeypatch, caplog
 ) -> None:
