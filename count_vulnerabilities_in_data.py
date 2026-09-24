@@ -20,7 +20,7 @@ INPUT_FILES = [
     {"filePath": fr"{BASE_PATH}\FIG Open Vulnerabilities_20260922.xlsx", "month": "Today"},
 ]
 
-OUTPUT_FILE = ""
+OUTPUT_FILE = "data/output/filtered_vulnerabilities.xlsx"
 
 """
     These filters work for any combination of string values you are searching for.
@@ -28,7 +28,8 @@ OUTPUT_FILE = ""
 """
 FILTERS = {
     # "saltminer.inventory_asset.attributes.appmap.apm_number": ["APM0001026", "APM0001024"],
-    # "vulnerability.severity": ["High"],
+    "vulnerability.severity": ["Critical"],
+    "saltminer.attributes.DaysPastDue": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30"]
 }
 
 
@@ -48,6 +49,11 @@ def main():
         filtered_df = filter_vulnerabilities(dataframe)
         print(f"Month: {input['month']}, Count: {len(filtered_df)}")
 
+        try:
+            with pd.ExcelWriter(OUTPUT_FILE, engine="openpyxl") as writer:
+                    filtered_df.to_excel(writer, index=False)
+        finally:
+            print("isssues found")
 
 if __name__ == "__main__":
     main()

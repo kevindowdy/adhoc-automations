@@ -60,18 +60,15 @@ class DayBucket(TypedDict):
 # Each entry becomes one sheet (named after ``sheetName``) in OUTPUT_FILE.
 # ``sheetName`` is ignored for CSV/TSV input, which has no sheets to select.
 INPUT_FILES = [
-    {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "January"},
-    {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "February"},
-    {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "March"},
-    {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "April"},
-    {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "May"},
-    {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "June"},
-    {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "July"},
-    {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "August"},
-    {
-        "filePath": r"data\output\past_due_vulnerabilities.xlsx",
-        "sheetName": "Today",
-    },
+    # {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "January"},
+    # {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "February"},
+    # {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "March"},
+    # {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "April"},
+    # {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "May"},
+    # {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "June"},
+    # {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "July"},
+    # {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "August"},
+    {"filePath": r"data\output\past_due_vulnerabilities.xlsx", "sheetName": "Today"},
 ]
 
 # Grouping columns, top-to-bottom nesting order, applied to every input.
@@ -92,7 +89,7 @@ GRAND_TOTAL_LABEL: Final[str] = "Grand Total"
 
 SHEET_NAME_MAX_LENGTH: Final[int] = 31  # Excel sheet-name limit.
 
-CATEGORY_COLUMN: Final[str] = "Application Owner"
+CATEGORY_COLUMN: Final[str] = "MC-2"
 LEVEL_COLUMN: Final[str] = "saltminer.inventory_asset.attributes.appmap.cio"
 COUNT_COLUMN: Final[str] = "Total Past Due"
 
@@ -105,7 +102,7 @@ COUNT_COLUMN: Final[str] = "Total Past Due"
 SEVERITY_COLUMN: Final[str | None] = "vulnerability.severity"
 
 # One report column per entry, in the order they should appear.
-SEVERITY_LEVELS: Final[list[str]] = ["Very Critical", "Critical", "High"]
+SEVERITY_LEVELS: Final[list[str]] = ["Critical", "High", "Medium"]
 
 # -----------------------------------------------------------------------
 # Days-past-due breakdown (optional). Set DAYS_PAST_DUE_COLUMN to None to
