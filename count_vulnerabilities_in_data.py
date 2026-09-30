@@ -8,7 +8,7 @@ import pandas as pd
 BASE_PATH = Path(r"C:\Users\fbfepde\Downloads")
 
 INPUT_FILES = [
-    # {"filePath": fr"{BASE_PATH}\FIG Open Vulnerabilities_20260102.xlsx", "month": "January"},
+    {"filePath": fr"{BASE_PATH}\FIG Open Vulnerabilities_20260102.xlsx", "month": "January"},
     # {"filePath": fr"{BASE_PATH}\FIG Open Vulnerabilities_20260202.xlsx", "month": "February"},
     # {"filePath": fr"{BASE_PATH}\FIG Open Vulnerabilities_20260302.xlsx", "month": "March"},
     # {"filePath": fr"{BASE_PATH}\FIG Open Vulnerabilities_20260401.xlsx", "month": "April"},
@@ -28,8 +28,8 @@ OUTPUT_FILE = "data/output/filtered_vulnerabilities.xlsx"
 """
 FILTERS = {
     # "saltminer.inventory_asset.attributes.appmap.apm_number": ["APM0001026", "APM0001024"],
-    "vulnerability.severity": ["Critical"],
-    "saltminer.attributes.DaysPastDue": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30"]
+    # "vulnerability.severity": ["Critical"],
+    # "saltminer.attributes.DaysPastDue": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30"]
 }
 
 
