@@ -7,7 +7,7 @@ from typing import Final, Sequence, TypedDict
 
 import pandas as pd
 
-INPUT_FILE = r"C:\Users\fbfepde\Documents\Temporary\FIG_Closed_Vulnerabilities\FIG_Closed_Vulnerabilities_20260929.parquet"
+INPUT_FILE = r"C:\Users\fbfepde\Documents\Temporary\FIG_Closed_Vulnerabilities\FIG_Closed_Vulnerabilities_20261014.parquet"
 
 all_closed_vulns = pd.read_parquet(INPUT_FILE)
 
@@ -18,7 +18,7 @@ SEVERITY_COLUMN: Final[str] = "vulnerability.severity"
 # Only rows whose severity matches one of these are included in the stats.
 SEVERITY_LEVELS: Final[list[str]] = ["critical", "high"]
 
-CLASS_LEVELS = ["class 1", "class 2", "class 3"]
+CLASS_LEVELS = ["class 1", "class 2", "class 3", "class 4"]
 
 # Column holding each row's numeric days-past-due value at remediation time.
 DAYS_PAST_DUE_COLUMN: Final[str] = "saltminer.attributes.DaysPastDue"
@@ -27,11 +27,11 @@ normalized_severity = (
         all_closed_vulns[SEVERITY_COLUMN].astype(str).str.strip().str.casefold()
     )
 
-print(normalized_severity.head)
+# print(normalized_severity.head)
 
 ch_closed_vulnerabilities = all_closed_vulns.loc[normalized_severity.isin(SEVERITY_LEVELS)].copy()
 
-print(len(ch_closed_vulnerabilities))
+# print(len(ch_closed_vulnerabilities))
 
 #####
 
@@ -47,25 +47,27 @@ print(len(ch_closed_vulnerabilities_classes123))
 
 ###
 
-CLOSED_DATE_COLUMN: Final[str] = "saltminer.attributes.DateClosed"
+# CLOSED_DATE_COLUMN: Final[str] = "saltminer.attributes.DateClosed"
 
-closed_dates = pd.to_datetime(
-    ch_closed_vulnerabilities_classes123[CLOSED_DATE_COLUMN],
-    errors="coerce",
-)
+# closed_dates = pd.to_datetime(
+#     ch_closed_vulnerabilities_classes123[CLOSED_DATE_COLUMN],
+#     errors="coerce",
+# )
 
-ch_closed_vulnerabilities_classes123 = (
-    ch_closed_vulnerabilities_classes123.loc[
-        (closed_dates.dt.year == 2026)
-        & (closed_dates.dt.month == 9)
-    ].copy()
-)
+# ch_closed_vulnerabilities_classes123 = (
+#     ch_closed_vulnerabilities_classes123.loc[
+#         (closed_dates.dt.year == 2026)
+#         & (closed_dates.dt.month == 9)
+#     ].copy()
+# )
 
 print(
-    f"Rows closed in January: {len(ch_closed_vulnerabilities_classes123)}"
+    f"Rows closed in month: {len(ch_closed_vulnerabilities_classes123)}"
 )
 
 ###
+
+ch_closed_vulnerabilities_classes123 = ch_closed_vulnerabilities_classes123[ch_closed_vulnerabilities_classes123["saltminer.inventory_asset.attributes.appmap.business_group"].isin(["Financial Institutions Group", "Corporate and Other"])].copy()
 
 total = len(ch_closed_vulnerabilities_classes123)
 days_past_due = pd.to_numeric(ch_closed_vulnerabilities_classes123["saltminer.attributes.DaysPastDue"], errors="coerce")
@@ -75,5 +77,9 @@ on_time_percentage = (on_time_count / total) * 100
 
 print("The on-time remediation rate is " + f"{on_time_count}/{total} ({on_time_percentage:.1f}%).")
 
-ch_closed_vulnerabilities_classes123.to_clipboard()
+# ch_closed_vulnerabilities_classes123.to_clipboard()
 
+print(all_closed_vulns.columns)
+
+# for division in all_closed_vulns["saltminer.inventory_asset.attributes.appmap.business_division"].unique():
+#     print(division)

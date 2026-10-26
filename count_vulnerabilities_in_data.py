@@ -5,10 +5,10 @@ from typing import Final, Sequence, TypedDict
 
 import pandas as pd
 
-BASE_PATH = Path(r"C:\Users\fbfepde\Downloads")
+BASE_PATH = Path(r"C:\Users\fbfepde\Documents\Temporary\FIG_Closed_Vulnerabilities")
 
 INPUT_FILES = [
-    {"filePath": fr"{BASE_PATH}\FIG Open Vulnerabilities_20260102.xlsx", "month": "January"},
+    # {"filePath": fr"{BASE_PATH}\FIG Open Vulnerabilities_20260102.xlsx", "month": "January"},
     # {"filePath": fr"{BASE_PATH}\FIG Open Vulnerabilities_20260202.xlsx", "month": "February"},
     # {"filePath": fr"{BASE_PATH}\FIG Open Vulnerabilities_20260302.xlsx", "month": "March"},
     # {"filePath": fr"{BASE_PATH}\FIG Open Vulnerabilities_20260401.xlsx", "month": "April"},
@@ -17,7 +17,7 @@ INPUT_FILES = [
     # {"filePath": fr"{BASE_PATH}\FIG Open Vulnerabilities_20260701.xlsx", "month": "July"},
     # {"filePath": fr"{BASE_PATH}\FIG Open Vulnerabilities_20260803.xlsx", "month": "August"},
     # {"filePath": fr"{BASE_PATH}\FIG Open Vulnerabilities_20260901.xlsx", "month": "September"},
-    {"filePath": fr"{BASE_PATH}\FIG Open Vulnerabilities_20260922.xlsx", "month": "Today"},
+    {"filePath": fr"{BASE_PATH}\FIG_Closed_Vulnerabilities_20261013.parquet", "month": "Today"},
 ]
 
 OUTPUT_FILE = "data/output/filtered_vulnerabilities.xlsx"
@@ -28,7 +28,7 @@ OUTPUT_FILE = "data/output/filtered_vulnerabilities.xlsx"
 """
 FILTERS = {
     # "saltminer.inventory_asset.attributes.appmap.apm_number": ["APM0001026", "APM0001024"],
-    # "vulnerability.severity": ["Critical"],
+    "vulnerability.severity": ["Critical", "High"],
     # "saltminer.attributes.DaysPastDue": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30"]
 }
 
@@ -45,7 +45,7 @@ def filter_vulnerabilities(df):
 def main():
 
     for input in INPUT_FILES:
-        dataframe = pd.read_excel(input["filePath"], 0)
+        dataframe = pd.read_parquet(input["filePath"])
         filtered_df = filter_vulnerabilities(dataframe)
         print(f"Month: {input['month']}, Count: {len(filtered_df)}")
 

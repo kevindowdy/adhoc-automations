@@ -11,9 +11,9 @@ import pandas as pd
 
 username = "fbfepde" ## REPLACE WITH USERNAME
 
-BASE_PATH = f"C:/Users/{username}/Documents/Temporary/FIG_Open_Vulnerabilities"
+BASE_PATH = f"C:/Users/{username}/Documents/Temporary/FIG_Suppressed_Vulnerabilities"
 
-FILEPATH = f"{BASE_PATH}/FIG Open Vulnerabilities_20260923.xlsx"
+FILEPATH = f"{BASE_PATH}/FIG Suppressed Vulnerabilities_20261007.xlsx"
 
 if "xlsx" in FILEPATH:
     df = pd.read_excel(fr"{FILEPATH}", dtype=str)
